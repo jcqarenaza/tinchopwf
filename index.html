@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel de Sucursales</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #f7f5f0; color: #1a1a1a; min-height: 100vh; }
+
+  .topbar { background: #fff; border-bottom: 1px solid #e5e2db; padding: 14px 32px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; }
+  .topbar h1 { font-size: 16px; font-weight: 600; color: #1a1a1a; flex: 1; }
+  .topbar p { font-size: 12px; color: #888; }
+
+  .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; gap: 16px; }
+  .spinner { width: 36px; height: 36px; border: 3px solid #e5e2db; border-top-color: #F0997B; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading p { font-size: 14px; color: #888; }
+
+  .error-screen { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; gap: 12px; text-align: center; padding: 24px; }
+  .error-screen h2 { font-size: 18px; font-weight: 600; color: #993C1D; }
+  .error-screen p { font-size: 14px; color: #666; max-width: 440px; line-height: 1.6; }
+  .error-screen code { background: #f0ede8; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+
+  .panel { max-width: 960px; margin: 0 auto; padding: 24px 24px 48px; display: none; }
+  .panel.visible { display: block; }
+
+  .header { margin-bottom: 20px; }
+  .header h2 { font-size: 20px; font-weight: 600; }
+  .header p { font-size: 13px; color: #888; margin-top: 3px; }
+
+  .metric-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .tab-btn { padding: 6px 18px; border-radius: 20px; border: 1.5px solid transparent; font-size: 13px; cursor: pointer; font-weight: 500; background: #ede9e3; color: #666; transition: all 0.15s; }
+  .tab-btn[data-metric="pedidos"].active { background: #FDE8E8; color: #993C1D; border-color: #F0997B; }
+  .tab-btn[data-metric="lineas"].active { background: #E6F0FF; color: #185FA5; border-color: #85B7EB; }
+  .tab-btn[data-metric="articulos"].active { background: #E8F5E8; color: #3B6D11; border-color: #97C459; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .kpi-card { border-radius: 14px; padding: 16px; border: 1.5px solid transparent; }
+  .kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .kpi-value { font-size: 24px; font-weight: 600; margin-bottom: 4px; }
+  .kpi-pct { display: inline-block; font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 10px; }
+  .kpi-sub { font-size: 11px; margin-top: 4px; }
+
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  @media (max-width: 640px) { .charts-row { grid-template-columns: 1fr; } }
+
+  .chart-card { background: #fff; border: 1px solid #e5e2db; border-radius: 14px; padding: 18px; }
+  .chart-title { font-size: 13px; font-weight: 500; color: #888; margin-bottom: 10px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #666; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  .table-card { background: #fff; border: 1px solid #e5e2db; border-radius: 14px; padding: 18px; overflow-x: auto; }
+  .table-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .view-tabs { display: flex; gap: 6px; }
+  .view-btn { padding: 4px 12px; border-radius: 12px; border: 1px solid #d0ccc4; font-size: 11px; cursor: pointer; background: #f7f5f0; color: #666; font-weight: 500; }
+  .view-btn.active { background: #fff; color: #1a1a1a; border-color: #aaa; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { padding: 7px 10px; text-align: right; font-weight: 600; font-size: 11px; color: #888; border-bottom: 1px solid #e5e2db; white-space: nowrap; }
+  th:first-child { text-align: left; }
+  td { padding: 8px 10px; text-align: right; border-bottom: 1px solid #f0ede8; color: #1a1a1a; white-space: nowrap; }
+  td:first-child { text-align: left; font-weight: 500; }
+  tr:last-child td { border-bottom: none; }
+  .suc-badge { display: inline-flex; align-items: center; gap: 6px; }
+  .suc-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .total-row td { font-weight: 600; color: #666; font-size: 11px; background: #f7f5f0; }
+  .pct-pill { display: inline-block; padding: 1px 7px; border-radius: 8px; font-size: 11px; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Panel de Sucursales</h1>
+  <p id="topbar-info">Cargando datos...</p>
+</div>
+
+<div class="loading" id="loading">
+  <div class="spinner"></div>
+  <p>Cargando datos_sucursales.csv...</p>
+</div>
+
+<div class="error-screen" id="errorScreen">
+  <h2>No se pudo cargar el CSV</h2>
+  <p id="errorDetail"></p>
+  <p style="font-size:12px;color:#aaa;margin-top:8px">
+    Si estás probando en local (doble clic al HTML), el navegador bloquea <code>fetch</code> por seguridad.<br>
+    Usá Live Server en VS Code, o subí ambos archivos a GitHub Pages y funcionará perfecto.
+  </p>
+</div>
+
+<div class="panel" id="panel">
+  <div class="header">
+    <h2>Evolución por Sucursal</h2>
+    <p id="panelSub"></p>
+  </div>
+
+  <div class="metric-tabs">
+    <button class="tab-btn active" data-metric="pedidos" onclick="setMetric('pedidos')">Pedidos</button>
+    <button class="tab-btn" data-metric="lineas" onclick="setMetric('lineas')">Líneas</button>
+    <button class="tab-btn" data-metric="articulos" onclick="setMetric('articulos')">Artículos</button>
+  </div>
+
+  <div class="kpi-grid" id="kpi-grid"></div>
+
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-title">Evolución mensual</div>
+      <div class="legend" id="legend-line"></div>
+      <div style="position:relative;height:200px"><canvas id="lineChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Participación % por mes</div>
+      <div class="legend" id="legend-pct"></div>
+      <div style="position:relative;height:200px"><canvas id="pctChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-title">Comparativo por mes</div>
+      <div class="legend" id="legend-bar"></div>
+      <div style="position:relative;height:200px"><canvas id="barChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Participación % total acumulada</div>
+      <div style="position:relative;height:200px"><canvas id="donutChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-header">
+      <div class="chart-title" style="margin-bottom:0" id="table-title">Detalle</div>
+      <div class="view-tabs">
+        <button class="view-btn active" onclick="setView('abs')">Valores</button>
+        <button class="view-btn" onclick="setView('pct')">% por mes</button>
+      </div>
+    </div>
+    <table id="detail-table"></table>
+  </div>
+</div>
+
+<script>
+const CSV_FILE = 'datos_sucursales.csv';
+
+const COLORS  = ['#F0997B','#85B7EB','#97C459','#AFA9EC','#FAC775','#5DCAA5','#D4537E','#7F77DD'];
+const PIL_BG  = ['#FAECE7','#E6F1FB','#EAF3DE','#EEEDFE','#FAEEDA','#E1F5EE','#FBEAF0','#EEEDFE'];
+const PIL_TXT = ['#993C1D','#185FA5','#3B6D11','#3C3489','#854F0B','#0F6E56','#993556','#3C3489'];
+const KPI_CARD = [
+  {bg:'#FDF2EF',bc:'#F0997B',lc:'#993C1D',vc:'#D85A30',pc:'#FAECE7',pct:'#993C1D'},
+  {bg:'#EEF5FF',bc:'#85B7EB',lc:'#185FA5',vc:'#378ADD',pc:'#E6F1FB',pct:'#185FA5'},
+  {bg:'#F0F9E8',bc:'#97C459',lc:'#3B6D11',vc:'#639922',pc:'#EAF3DE',pct:'#3B6D11'},
+  {bg:'#F5EEFF',bc:'#AFA9EC',lc:'#3C3489',vc:'#7F77DD',pc:'#EEEDFE',pct:'#3C3489'},
+  {bg:'#FAEEDA',bc:'#FAC775',lc:'#854F0B',vc:'#BA7517',pc:'#FAEEDA',pct:'#854F0B'},
+  {bg:'#E1F5EE',bc:'#5DCAA5',lc:'#0F6E56',vc:'#1D9E75',pc:'#E1F5EE',pct:'#0F6E56'},
+  {bg:'#FBEAF0',bc:'#ED93B1',lc:'#993556',vc:'#D4537E',pc:'#FBEAF0',pct:'#993556'},
+  {bg:'#EEEDFE',bc:'#AFA9EC',lc:'#3C3489',vc:'#7F77DD',pc:'#EEEDFE',pct:'#3C3489'},
+];
+
+let DATA = null;
+let currentMetric = 'pedidos';
+let currentView = 'abs';
+let charts = {};
+
+async function loadCSV() {
+  try {
+    const res = await fetch(CSV_FILE);
+    if (!res.ok) throw new Error(`No se encontró el archivo (HTTP ${res.status})`);
+    const text = await res.text();
+    DATA = parseCSV(text);
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('panel').classList.add('visible');
+    document.getElementById('topbar-info').textContent = CSV_FILE + ' · ' + DATA.sucursales.length + ' sucursales';
+    document.getElementById('panelSub').textContent =
+      `${DATA.meses[0]} – ${DATA.meses[DATA.meses.length-1]} · ${DATA.sucursales.length} sucursales`;
+    renderAll();
+  } catch(err) {
+    document.getElementById('loading').style.display = 'none';
+    const es = document.getElementById('errorScreen');
+    es.style.display = 'flex';
+    document.getElementById('errorDetail').innerHTML =
+      `No se pudo cargar <code>${CSV_FILE}</code>: ${err.message}<br><br>
+       Asegurate de que el archivo esté en la misma carpeta que este HTML y que ambos estén subidos al repositorio.`;
+    document.getElementById('topbar-info').textContent = 'Error al cargar datos';
+  }
+}
+
+function parseCSV(text) {
+  const sep = text.includes(';') ? ';' : ',';
+  const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) throw new Error('El archivo no tiene datos.');
+  const headers = lines[0].split(sep).map(h => h.replace(/"/g,'').trim().toLowerCase());
+  const rows = lines.slice(1).map(l => {
+    const vals = l.split(sep).map(v => v.replace(/"/g,'').trim());
+    const obj = {};
+    headers.forEach((h,i) => obj[h] = vals[i] || '');
+    return obj;
+  });
+  const mesCols = headers.filter(h => h.startsWith('pedidos_')).map(h => h.replace('pedidos_',''));
+  if (!mesCols.length) throw new Error('No se encontraron columnas pedidos_mes.');
+  const sucursales = rows.map(r => r['nombre_deposito']);
+  const meses = mesCols.map(m => m.charAt(0).toUpperCase() + m.slice(1));
+  const build = prefix => rows.map(r => mesCols.map(m => parseInt(r[`${prefix}_${m}`]) || 0));
+  return { sucursales, meses, pedidos: build('pedidos'), lineas: build('lineas'), articulos: build('articulos') };
+}
+
+const getD = () => DATA[currentMetric];
+const sumRow = r => r.reduce((a,b)=>a+b,0);
+const colSum = (data,col) => data.reduce((a,r)=>a+r[col],0);
+const fmt = n => Math.round(n).toLocaleString('es-AR');
+
+function renderKPIs() {
+  const data = getD();
+  const grand = DATA.sucursales.reduce((a,_,i)=>a+sumRow(data[i]),0);
+  document.getElementById('kpi-grid').innerHTML = DATA.sucursales.map((s,i)=>{
+    const k = KPI_CARD[i%KPI_CARD.length];
+    const total = sumRow(data[i]);
+    const pct = ((total/grand)*100).toFixed(1);
+    const maxVal = Math.max(...data[i].slice(0, DATA.meses.length-1));
+    const maxMes = DATA.meses[data[i].indexOf(maxVal)];
+    return `<div class="kpi-card" style="background:${k.bg};border-color:${k.bc}">
+      <div class="kpi-label" style="color:${k.lc}">${s}</div>
+      <div class="kpi-value" style="color:${k.vc}">${fmt(total)}</div>
+      <span class="kpi-pct" style="background:${k.pc};color:${k.pct}">${pct}% del total</span>
+      <div class="kpi-sub" style="color:${k.lc}">pico en ${maxMes}</div>
+    </div>`;
+  }).join('');
+}
+
+function makeLegend(id) {
+  document.getElementById(id).innerHTML = DATA.sucursales.map((s,i)=>
+    `<span class="legend-item"><span class="legend-dot" style="background:${COLORS[i%COLORS.length]}"></span>${s}</span>`
+  ).join('');
+}
+
+function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+function renderLine() {
+  const data = getD(); destroyChart('line');
+  charts['line'] = new Chart(document.getElementById('lineChart'), {
+    type: 'line',
+    data: { labels: DATA.meses, datasets: DATA.sucursales.map((s,i)=>({
+      label: s, data: data[i], borderColor: COLORS[i%COLORS.length],
+      backgroundColor: 'transparent', borderWidth: 2, tension: 0.4,
+      pointRadius: 4, pointBackgroundColor: COLORS[i%COLORS.length]
+    }))},
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false,
+        callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)}` }}},
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#888' }},
+        y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 11 }, color: '#888', callback: v => fmt(v) }}
+      }
+    }
+  });
+}
+
+function renderPct() {
+  const data = getD(); destroyChart('pct');
+  const pctData = DATA.sucursales.map((_,i)=>
+    DATA.meses.map((_,m)=>{ const t=colSum(data,m); return t?Math.round((data[i][m]/t)*1000)/10:0; })
+  );
+  charts['pct'] = new Chart(document.getElementById('pctChart'), {
+    type: 'bar',
+    data: { labels: DATA.meses, datasets: DATA.sucursales.map((s,i)=>({
+      label: s, data: pctData[i], backgroundColor: COLORS[i%COLORS.length], borderRadius: 2, borderSkipped: false
+    }))},
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false,
+        callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y.toFixed(1)}%` }}},
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 }, color: '#888' }},
+        y: { stacked: true, max: 100, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 11 }, color: '#888', callback: v => v+'%' }}
+      }
+    }
+  });
+}
+
+function renderBar() {
+  const data = getD(); destroyChart('bar');
+  charts['bar'] = new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: { labels: DATA.meses, datasets: DATA.sucursales.map((s,i)=>({
+      label: s, data: data[i], backgroundColor: COLORS[i%COLORS.length], borderRadius: 4, borderSkipped: false
+    }))},
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false,
+        callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)}` }}},
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#888' }},
+        y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 11 }, color: '#888', callback: v => fmt(v) }}
+      }
+    }
+  });
+}
+
+function renderDonut() {
+  const data = getD(); destroyChart('donut');
+  const totals = DATA.sucursales.map((_,i)=>sumRow(data[i]));
+  const grand = totals.reduce((a,b)=>a+b,0);
+  charts['donut'] = new Chart(document.getElementById('donutChart'), {
+    type: 'doughnut',
+    data: { labels: DATA.sucursales, datasets: [{
+      data: totals, backgroundColor: DATA.sucursales.map((_,i)=>COLORS[i%COLORS.length]),
+      borderWidth: 2, borderColor: '#fff'
+    }]},
+    options: { responsive: true, maintainAspectRatio: false, cutout: '60%',
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: c => ` ${c.label}: ${((c.parsed/grand)*100).toFixed(1)}%` }}}
+    },
+    plugins: [{ id: 'center', afterDraw(chart) {
+      const {ctx: c, chartArea: {width,height,left,top}} = chart;
+      const cx=left+width/2, cy=top+height/2;
+      c.save(); c.textAlign='center'; c.textBaseline='middle';
+      c.font='500 13px system-ui'; c.fillStyle='#aaa'; c.fillText('Total', cx, cy-10);
+      c.font='600 14px system-ui'; c.fillStyle='#333'; c.fillText(fmt(grand), cx, cy+10);
+      c.restore();
+    }}]
+  });
+}
+
+function renderTable() {
+  const data = getD();
+  const lbl = {pedidos:'Pedidos',lineas:'Líneas',articulos:'Artículos'};
+  document.getElementById('table-title').textContent = `Detalle — ${lbl[currentMetric]}`;
+  const colTotals = DATA.meses.map((_,m)=>colSum(data,m));
+  const rowTotals = DATA.sucursales.map((_,i)=>sumRow(data[i]));
+  const grand = rowTotals.reduce((a,b)=>a+b,0);
+  let html = `<thead><tr><th>Sucursal</th>${DATA.meses.map(m=>`<th>${m}</th>`).join('')}<th>Total</th><th>% total</th></tr></thead><tbody>`;
+  DATA.sucursales.forEach((s,i)=>{
+    const bg=PIL_BG[i%PIL_BG.length], tc=PIL_TXT[i%PIL_TXT.length];
+    const pctTotal = ((rowTotals[i]/grand)*100).toFixed(1);
+    const cells = currentView === 'abs'
+      ? data[i].map(v=>`<td>${fmt(v)}</td>`).join('')
+      : data[i].map((v,m)=>{ const p=colTotals[m]?((v/colTotals[m])*100).toFixed(1):'0.0';
+          return `<td><span class="pct-pill" style="background:${bg};color:${tc}">${p}%</span></td>`; }).join('');
+    html += `<tr><td><span class="suc-badge"><span class="suc-dot" style="background:${COLORS[i%COLORS.length]}"></span>${s}</span></td>
+      ${cells}<td style="font-weight:600">${fmt(rowTotals[i])}</td>
+      <td><span class="pct-pill" style="background:${bg};color:${tc}">${pctTotal}%</span></td></tr>`;
+  });
+  html += `<tr class="total-row"><td>Total general</td>${colTotals.map(v=>`<td>${fmt(v)}</td>`).join('')}<td>${fmt(grand)}</td><td>100%</td></tr></tbody>`;
+  document.getElementById('detail-table').innerHTML = html;
+}
+
+function renderAll() {
+  renderKPIs();
+  ['line','pct','bar'].forEach(id => makeLegend('legend-'+id));
+  renderLine(); renderPct(); renderBar(); renderDonut(); renderTable();
+}
+
+function setMetric(m) {
+  currentMetric = m;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.metric === m));
+  renderAll();
+}
+
+function setView(v) {
+  currentView = v;
+  document.querySelectorAll('.view-btn').forEach(b =>
+    b.classList.toggle('active', (v==='abs'?'Valores':'% por mes') === b.textContent));
+  renderTable();
+}
+
+loadCSV();
+</script>
+</body>
+</html>
