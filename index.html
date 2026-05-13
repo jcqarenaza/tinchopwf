@@ -456,21 +456,31 @@ let sortCol = 'total_unidades', sortDir = -1;
 let filters = { search:'', rotacion:'ALL', origen:'ALL', destino:'ALL' };
 
 function clickRotCard(rot) {
-  // Toggle: if already active, reset to ALL
   const newRot = (filters.rotacion === rot) ? 'ALL' : rot;
   filters.rotacion = newRot;
-  // Sync chip
-  document.querySelectorAll('#rotFilter .chip').forEach(c=>c.classList.remove('active'));
+
+  // Sync chip in toolbar
+  document.querySelectorAll('#rotFilter .chip').forEach(c => c.classList.remove('active'));
   const chip = document.querySelector(`#rotFilter [data-rot="${newRot}"]`);
   if (chip) chip.classList.add('active');
-  // Highlight card
-  document.querySelectorAll('.rot-card').forEach(c=>{c.classList.remove('active'); c.style.borderColor='';});
+
+  // Highlight card border
+  document.querySelectorAll('.rot-card').forEach(c => { c.classList.remove('active'); c.style.borderColor = ''; });
   if (newRot !== 'ALL') {
-    const card = document.getElementById('rotcard-'+rot);
+    const card = document.getElementById('rotcard-' + rot);
     if (card) { card.classList.add('active'); card.style.borderColor = ROT_CFG[rot].bar; }
   }
+
+  // Always reset sort to unidades desc when filtering from card
+  sortCol = 'total_unidades';
+  sortDir = -1;
+  document.querySelectorAll('.detail-table thead th').forEach(th => th.classList.remove('sorted'));
+  document.getElementById('th-total_unidades').classList.add('sorted');
+  document.querySelectorAll('[id^="si-"]').forEach(s => s.textContent = '');
+  document.getElementById('si-total_unidades').textContent = ' ↓';
+
   applyFilters();
-  document.getElementById('detailSection').scrollIntoView({behavior:'smooth'});
+  setTimeout(() => document.getElementById('detailSection').scrollIntoView({behavior:'smooth'}), 50);
 }
 
 function applyFilters() {
